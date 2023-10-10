@@ -2,6 +2,7 @@ import time
 import requests
 
 from .PTZControl import PTZControl
+from .GeolocationAPI import GeolocationAPI
 
 from requests.auth import HTTPDigestAuth
 
@@ -19,8 +20,9 @@ class VapixAPI:
         self.session.timeout = timeout
         
         self.ptz = PTZControl(self)
+        self.geolocation = GeolocationAPI(self)
         
-    def _send_request(self, endpoint, method="GET", params=None):
+    def _send_request(self, endpoint, method="GET", params=None, base_args=True):
         url = f"{self.base_url}/{endpoint}"
         base_args = {
             'camera': '1',
@@ -41,6 +43,18 @@ class VapixAPI:
         except requests.RequestException as e:
             raise e
         
+    def _send_request_vanilla(self, endpoint, method="GET", params=None):
+        url = f"{self.base_url}/{endpoint}"
+        
+        try:
+            if method == "GET":
+                response = self.session.get(url, params=params)
+            elif method == "POST":
+                response = self.session.post(url, data=params)
+            response.raise_for_status()
+            return response.text
+        except requests.RequestException as e:
+            raise e
 
         
         
@@ -50,4 +64,3 @@ if __name__ == '__main__':
     import dotenv
     dotenv.load_dotenv()
     v = VapixAPI(os.environ.get('host'), os.environ.get('user'), os.environ.get('password'))
-    print(v.ptz.get_current_position())
