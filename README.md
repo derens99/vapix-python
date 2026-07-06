@@ -90,15 +90,21 @@ uv build              # build sdist and wheel
 
 ## Migrating from 0.1.x
 
-The old CamelCase module paths still work but emit a `DeprecationWarning`:
+Import from the package root — the old CamelCase module paths were removed
+(keeping them silently corrupted the package namespace when both import
+styles were used in one process):
 
 ```python
-from vapix_python.VapixAPI import VapixAPI   # deprecated
-from vapix_python import VapixAPI            # preferred
+from vapix_python.VapixAPI import VapixAPI   # 0.1.x — no longer works
+from vapix_python import VapixAPI            # 0.2.0
 ```
 
 Notable fixes in 0.2.0:
 
-- Request timeouts are now actually applied (previously the `timeout` argument was silently ignored).
+- Request timeouts are now actually applied (previously the `timeout` argument was silently ignored, so calls could hang forever).
 - `PTZControl.rename_preset_number(number, name)` now sends the number and name in the correct fields (they were swapped).
+- `PTZControl.ptz_enabled(channel)` now actually queries the given channel (`info=1&camera=<channel>`; previously the channel was sent as the `info` value).
+- PTZ commands the camera rejects with an `Error: ...` body now raise `VapixResponseError` instead of silently returning success.
 - Geolocation responses are parsed robustly (namespaced XML supported, no stray `print()` output) and camera-reported errors raise `VapixResponseError`.
+- Errors are raised as `vapix_python` exception types; `VapixRequestError` still subclasses `requests.RequestException`, so existing `except requests.RequestException:` handlers keep working.
+- HTTP 401 **and** 403 raise `VapixAuthenticationError` (bad credentials vs. insufficient privileges).

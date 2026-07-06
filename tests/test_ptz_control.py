@@ -16,9 +16,24 @@ def test_get_current_position_handles_reordered_response(api, fake_session):
 
 
 def test_get_current_position_raises_on_garbage(api, fake_session):
-    fake_session.queue("Error: PTZ not available")
+    fake_session.queue("pan is unavailable")
     with pytest.raises(VapixResponseError):
         api.ptz.get_current_position()
+
+
+def test_camera_error_body_raises(api, fake_session):
+    fake_session.queue("Error: PTZ not available")
+    with pytest.raises(VapixResponseError, match="PTZ not available"):
+        api.ptz.set_home()
+
+
+def test_commands_include_ptz_base_args(api, fake_session):
+    fake_session.queue()
+    api.ptz.absolute_move(10, 20, 30, 40)
+    params = fake_session.last["params"]
+    assert params["camera"] == 1
+    assert params["html"] == "no"
+    assert "timestamp" in params
 
 
 def test_absolute_move_sends_expected_params(api, fake_session):
@@ -29,6 +44,14 @@ def test_absolute_move_sends_expected_params(api, fake_session):
     assert params["tilt"] == 20
     assert params["zoom"] == 30
     assert params["speed"] == 40
+
+
+def test_ptz_enabled_queries_info_for_channel(api, fake_session):
+    fake_session.queue("Available commands:\r\n...")
+    api.ptz.ptz_enabled(channel=2)
+    params = fake_session.last["params"]
+    assert params["info"] == "1"
+    assert params["camera"] == 2
 
 
 def test_relative_move_sends_expected_params(api, fake_session):

@@ -2,25 +2,17 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
+from ._parsing import parse_key_value
 from .exceptions import VapixResponseError
 
 if TYPE_CHECKING:  # imported for type hints only, avoids a circular import
     from .vapix_api import VapixAPI
 
 _PTZ_ENDPOINT = "com/ptz.cgi"
-
-
-def _parse_key_value_response(text: str) -> dict[str, str]:
-    """Parse a VAPIX ``key=value`` line response into a dict."""
-    values: dict[str, str] = {}
-    for line in text.splitlines():
-        if "=" in line:
-            key, _, value = line.partition("=")
-            values[key.strip()] = value.strip()
-    return values
 
 
 class PTZControl:
@@ -30,7 +22,30 @@ class PTZControl:
         self.api = api
 
     def _command(self, params: Mapping[str, Any]) -> str:
-        return self.api._send_request(_PTZ_ENDPOINT, params=params)
+        """Send a ``ptz.cgi`` command with the standard base arguments.
+
+        ``ptz.cgi`` expects ``camera``/``html``/``timestamp`` on every call;
+        explicit ``params`` override the defaults. Some firmware reports
+        command failures as an ``Error: ...`` body with HTTP 200, so that is
+        surfaced as :class:`VapixResponseError` instead of being swallowed.
+        """
+        payload: dict[str, Any] = {
+            "camera": self.api.camera,
+            "html": "no",
+            "timestamp": int(time.time()),
+        }
+        payload.update(params)
+        resp = self.api._send_request(_PTZ_ENDPOINT, params=payload)
+        if resp.lstrip().startswith("Error"):
+            raise VapixResponseError(f"PTZ command rejected by camera: {resp.strip()}")
+        return resp
+
+    def _set_level(self, param: str, value: int, label: str) -> bool:
+        """Validate a 0-9999 level and send it as a single-parameter command."""
+        if not 0 <= value <= 9999:
+            raise ValueError(f"{label} must be between 0 and 9999.")
+        self._command({param: value})
+        return True
 
     # ------------------------------------------------------------------
     # Position queries
@@ -45,7 +60,7 @@ class PTZControl:
             VapixResponseError: The camera response did not contain a position.
         """
         resp = self._command({"query": "position"})
-        values = _parse_key_value_response(resp)
+        values = parse_key_value(resp)
         try:
             return float(values["pan"]), float(values["tilt"]), float(values["zoom"])
         except (KeyError, ValueError) as exc:
@@ -57,16 +72,20 @@ class PTZControl:
         """Get the raw position query response as returned by the camera."""
         return self._command({"query": "position"})
 
-    def ptz_enabled(self, channel: int = 1) -> str:
+    def ptz_enabled(self, channel: int | None = None) -> str:
         """Check whether PTZ is available.
 
         Args:
-            channel: The video channel to check.
+            channel: The video channel to check. Defaults to the client's
+                configured camera number.
 
         Returns:
             The list of available PTZ commands, or an empty string if disabled.
         """
-        return self._command({"info": channel})
+        params: dict[str, Any] = {"info": "1"}
+        if channel is not None:
+            params["camera"] = channel
+        return self._command(params)
 
     # ------------------------------------------------------------------
     # Movement
@@ -143,31 +162,19 @@ class PTZControl:
     # ------------------------------------------------------------------
     def set_iris(self, iris_level: int = 1750) -> bool:
         """Set the iris to the given level (0-9999)."""
-        if not 0 <= iris_level <= 9999:
-            raise ValueError("Iris level must be between 0 and 9999.")
-        self._command({"iris": iris_level})
-        return True
+        return self._set_level("iris", iris_level, "Iris level")
 
     def set_focus(self, focus_level: int) -> bool:
         """Set the focus to the given level (0-9999)."""
-        if not 0 <= focus_level <= 9999:
-            raise ValueError("Focus level must be between 0 and 9999.")
-        self._command({"focus": focus_level})
-        return True
+        return self._set_level("focus", focus_level, "Focus level")
 
     def set_zoom(self, zoom_level: int) -> bool:
         """Set the zoom to the given level (0-9999)."""
-        if not 0 <= zoom_level <= 9999:
-            raise ValueError("Zoom level must be between 0 and 9999.")
-        self._command({"zoom": zoom_level})
-        return True
+        return self._set_level("zoom", zoom_level, "Zoom level")
 
     def set_brightness(self, brightness_level: int) -> bool:
         """Set the brightness to the given level (0-9999)."""
-        if not 0 <= brightness_level <= 9999:
-            raise ValueError("Brightness level must be between 0 and 9999.")
-        self._command({"brightness": brightness_level})
-        return True
+        return self._set_level("brightness", brightness_level, "Brightness level")
 
     def set_autofocus(self, enabled: bool = True) -> bool:
         """Enable or disable autofocus."""

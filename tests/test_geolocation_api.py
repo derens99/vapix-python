@@ -98,3 +98,29 @@ def test_set_position_raises_on_error(api, fake_session):
     fake_session.queue(ERROR_RESPONSE)
     with pytest.raises(VapixResponseError, match="Invalid latitude"):
         api.geolocation.set_position(999, 999)
+
+
+@pytest.mark.parametrize("body", ["", "  ", "OK"])
+def test_set_position_accepts_non_xml_success_body(api, fake_session, body):
+    """Some firmware answers a successful set.cgi with an empty or plain body."""
+    fake_session.queue(body)
+    assert api.geolocation.set_position(1.0, 2.0) is True
+
+
+@pytest.mark.parametrize("value", ["1", "yes", "TRUE"])
+def test_valid_flags_accept_nonstandard_truthy_values(api, fake_session, value):
+    fake_session.queue(
+        "<PositionResponse><Lat>1</Lat><Lng>2</Lng><Heading>3</Heading>"
+        f"<ValidPosition>{value}</ValidPosition><ValidHeading>false</ValidHeading>"
+        "</PositionResponse>"
+    )
+    position = api.geolocation.get_position()
+    assert position["valid_position"] is True
+    assert position["valid_heading"] is False
+
+
+def test_valid_flags_default_false_when_missing(api, fake_session):
+    fake_session.queue(
+        "<PositionResponse><Lat>1</Lat><Lng>2</Lng><Heading>3</Heading></PositionResponse>"
+    )
+    assert api.geolocation.get_position()["valid_position"] is False

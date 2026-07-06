@@ -6,13 +6,14 @@ from .exceptions import (
     VapixRequestError,
     VapixResponseError,
 )
-from .geolocation_api import GeolocationAPI
+from .geolocation_api import GeolocationAPI, GeoPosition
 from .ptz_control import PTZControl
 from .vapix_api import VapixAPI
 
 __version__ = "0.2.0"
 
 __all__ = [
+    "GeoPosition",
     "GeolocationAPI",
     "PTZControl",
     "VapixAPI",

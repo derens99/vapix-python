@@ -1,5 +1,6 @@
 [build-system]
-requires = ["hatchling"]
+# hatchling >= 1.27 is needed for the PEP 639 license / license-files fields
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
@@ -31,9 +32,6 @@ dependencies = ["requests>=2.28"]
 Homepage = "https://github.com/derens99/vapix-python"
 Issues = "https://github.com/derens99/vapix-python/issues"
 
-[project.optional-dependencies]
-dev = ["pytest>=7", "ruff>=0.4"]
-
 [dependency-groups]
 dev = ["pytest>=7", "ruff>=0.4"]
 
@@ -50,15 +48,6 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM"]
-ignore = [
-    "UP007", # keep Optional[X] for Python 3.9 compatibility in runtime positions
-]
-
-[tool.ruff.lint.per-file-ignores]
-# Deprecated compat shims intentionally shadow their own class names
-"src/vapix_python/VapixAPI.py" = ["E402"]
-"src/vapix_python/PTZControl.py" = ["E402"]
-"src/vapix_python/GeolocationAPI.py" = ["E402"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

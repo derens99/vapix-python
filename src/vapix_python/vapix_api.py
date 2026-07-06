@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from collections.abc import Mapping
 from types import TracebackType
 from typing import Any
@@ -10,6 +9,7 @@ from typing import Any
 import requests
 from requests.auth import HTTPBasicAuth, HTTPDigestAuth
 
+from ._parsing import parse_key_value
 from .exceptions import VapixAuthenticationError, VapixRequestError
 from .geolocation_api import GeolocationAPI
 from .ptz_control import PTZControl
@@ -37,7 +37,7 @@ class VapixAPI:
             or a path to a CA bundle. Only meaningful with ``secure=True``.
         auth_method: ``"digest"`` (default, what most Axis firmware expects)
             or ``"basic"``.
-        camera: Camera/channel number included in requests that take one.
+        camera: Camera/channel number used by endpoints that take one.
     """
 
     def __init__(
@@ -54,6 +54,7 @@ class VapixAPI:
     ) -> None:
         self.host = host
         self.user = user
+        self.password = password
         self.timeout = timeout
         self.camera = camera
 
@@ -80,19 +81,22 @@ class VapixAPI:
         endpoint: str,
         method: str = "GET",
         params: Mapping[str, Any] | None = None,
-        base_args: bool = True,
     ) -> str:
         """Send a request to a VAPIX endpoint and return the response body.
+
+        The transport is endpoint-agnostic: it sends exactly the parameters it
+        is given. Endpoint-specific arguments (like ``ptz.cgi``'s ``camera``/
+        ``html``/``timestamp``) belong in the feature layer that knows about
+        them.
 
         Args:
             endpoint: Endpoint path relative to ``/axis-cgi``, e.g. ``com/ptz.cgi``.
             method: ``"GET"`` or ``"POST"``.
             params: Query parameters (GET) or form data (POST).
-            base_args: Include the common ``camera``/``html``/``timestamp``
-                arguments expected by most CGI endpoints.
 
         Raises:
-            VapixAuthenticationError: The camera returned HTTP 401.
+            VapixAuthenticationError: The camera returned HTTP 401 (bad
+                credentials) or 403 (insufficient privileges).
             VapixRequestError: The request failed at the network level or the
                 camera returned another HTTP error status.
         """
@@ -101,14 +105,8 @@ class VapixAPI:
             raise ValueError(f"Unsupported HTTP method: {method!r}")
 
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
-        payload: dict[str, Any] = {}
-        if base_args:
-            payload.update({"camera": self.camera, "html": "no", "timestamp": int(time.time())})
-        if params:
-            payload.update(params)
-
         request_kwargs: dict[str, Any] = (
-            {"params": payload or None} if method == "GET" else {"data": payload or None}
+            {"params": params} if method == "GET" else {"data": params}
         )
         try:
             response = self.session.request(method, url, timeout=self.timeout, **request_kwargs)
@@ -119,20 +117,16 @@ class VapixAPI:
             raise VapixAuthenticationError(
                 f"Authentication failed for {url} (HTTP 401) — check user/password"
             )
+        if response.status_code == 403:
+            raise VapixAuthenticationError(
+                f"Access denied for {url} (HTTP 403) — the account lacks privileges "
+                "for this operation"
+            )
         try:
             response.raise_for_status()
         except requests.HTTPError as exc:
             raise VapixRequestError(str(exc)) from exc
         return response.text
-
-    def _send_request_vanilla(
-        self,
-        endpoint: str,
-        method: str = "GET",
-        params: Mapping[str, Any] | None = None,
-    ) -> str:
-        """Send a request without the common base arguments."""
-        return self._send_request(endpoint, method=method, params=params, base_args=False)
 
     # ------------------------------------------------------------------
     # General device helpers
@@ -147,15 +141,9 @@ class VapixAPI:
             Mapping of fully-qualified parameter names to their values.
         """
         params: dict[str, Any] = {"action": "list"}
-        if group:
+        if group is not None:
             params["group"] = group
-        resp = self._send_request("param.cgi", params=params, base_args=False)
-        result: dict[str, str] = {}
-        for line in resp.splitlines():
-            if "=" in line:
-                key, _, value = line.partition("=")
-                result[key.strip()] = value.strip()
-        return result
+        return parse_key_value(self._send_request("param.cgi", params=params))
 
     # ------------------------------------------------------------------
     # Lifecycle
