@@ -1,26 +1,110 @@
-# Vapix API Python Wrapper by Axis Communications
+# vapix-python
 
-This Python library provides a seamless wrapper around the Vapix API by Axis Communications, facilitating effortless interactions with all their  cameras.
+A Python wrapper for the [VAPIX API](https://developer.axis.com/vapix/) by Axis Communications, providing a clean, typed interface for controlling Axis network cameras.
 
 ## Features
 
-- Complete Pythonic access to all Vapix API endpoints.
-- Simplified methods for interacting with all cameras.
-- Built with extensibility and ease-of-use in mind.
+- **PTZ control** — absolute, relative, and continuous pan/tilt/zoom moves, focus, iris, brightness, presets, and home position via `com/ptz.cgi`.
+- **Geolocation** — read and set the camera's configured position and heading.
+- **Device parameters** — list device parameters via `param.cgi`.
+- **Solid HTTP layer** — one authenticated session (digest or basic auth), HTTP or HTTPS, real per-request timeouts, and typed exceptions (`VapixAuthenticationError`, `VapixRequestError`, `VapixResponseError`).
+- **Typed and tested** — full type hints and a mocked test suite that runs without camera hardware.
 
 ## Installation
 
-To install the wrapper, you can use pip: 
+Not yet published to PyPI. Install from source:
 
-TODO - PyPi hosting coming soon
+```bash
+pip install git+https://github.com/derens99/vapix-python.git
+```
 
-## Quick Start
+Or for local development (using [uv](https://docs.astral.sh/uv/)):
+
+```bash
+git clone https://github.com/derens99/vapix-python.git
+cd vapix-python
+uv sync
+```
+
+## Quick start
 
 ```python
-from vapix_python.VapixAPI import VapixAPI
+from vapix_python import VapixAPI
 
-# Initialize the API caller with the base URL
-vapix_api = VapixAPI(os.environ.get('host'), os.environ.get('user'), os.environ.get('password'))
+with VapixAPI("192.168.0.90", "root", "your-password") as api:
+    # Current pan/tilt/zoom
+    pan, tilt, zoom = api.ptz.get_current_position()
 
-print(vapix_api.ptz.get_current_ptz())
+    # Move the camera
+    api.ptz.absolute_move(pan=90, tilt=0, zoom=500, speed=50)
+    api.ptz.go_home(speed=100)
+
+    # Geolocation
+    position = api.geolocation.get_position()
+    print(position["lat"], position["lon"])
+
+    # Device parameters
+    brand = api.get_parameters(group="Brand")
 ```
+
+### Connection options
+
+```python
+api = VapixAPI(
+    "cam.example.com",
+    "root",
+    "your-password",
+    timeout=10,          # per-request timeout in seconds
+    secure=True,         # use HTTPS
+    verify_ssl=False,    # or a path to a CA bundle
+    auth_method="digest" # or "basic"
+)
+```
+
+### Error handling
+
+```python
+from vapix_python import VapixAPI, VapixAuthenticationError, VapixRequestError
+
+try:
+    with VapixAPI("192.168.0.90", "root", "wrong") as api:
+        api.ptz.get_current_position()
+except VapixAuthenticationError:
+    print("Bad credentials")
+except VapixRequestError as exc:
+    print(f"Camera unreachable or returned an error: {exc}")
+```
+
+## Development
+
+The project uses [uv](https://docs.astral.sh/uv/) for dependency management:
+
+```bash
+uv sync               # create .venv and install the package + dev dependencies
+uv run ruff check .   # lint
+uv run pytest         # run the test suite (no camera required)
+uv build              # build sdist and wheel
+```
+
+`pip install -e ".[dev]"` also works if you prefer plain pip.
+
+## Migrating from 0.1.x
+
+Import from the package root — the old CamelCase module paths were removed
+(keeping them silently corrupted the package namespace when both import
+styles were used in one process):
+
+```python
+from vapix_python.VapixAPI import VapixAPI   # 0.1.x — no longer works
+from vapix_python import VapixAPI            # 0.2.0
+```
+
+Notable fixes in 0.2.0:
+
+- Request timeouts are now actually applied (previously the `timeout` argument was silently ignored, so calls could hang forever).
+- `PTZControl.rename_preset_number(number, name)` now sends the number and name in the correct fields (they were swapped).
+- `PTZControl.ptz_enabled(channel)` now actually queries the given channel (`info=1&camera=<channel>`; previously the channel was sent as the `info` value).
+- PTZ commands the camera rejects with an `Error: ...` body now raise `VapixResponseError` instead of silently returning success.
+- Geolocation responses are parsed robustly (namespaced XML supported, no stray `print()` output) and camera-reported errors raise `VapixResponseError`.
+- Errors are raised as `vapix_python` exception types; `VapixRequestError` still subclasses `requests.RequestException`, so existing `except requests.RequestException:` handlers keep working.
+- HTTP 401 **and** 403 raise `VapixAuthenticationError` (bad credentials vs. insufficient privileges).
