@@ -1,1 +1,3 @@
-requests
+# Runtime dependencies are declared in pyproject.toml; this file is kept for
+# convenience (pip install -r requirements.txt).
+requests>=2.28
