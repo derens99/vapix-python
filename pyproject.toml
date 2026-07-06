@@ -7,6 +7,8 @@ name = "vapix-python"
 dynamic = ["version"]
 description = "Python wrapper for the Axis Communications VAPIX camera API"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.9"
 authors = [{ name = "derens99" }]
 keywords = ["axis", "vapix", "camera", "ptz", "ip-camera"]
@@ -30,6 +32,9 @@ Homepage = "https://github.com/derens99/vapix-python"
 Issues = "https://github.com/derens99/vapix-python/issues"
 
 [project.optional-dependencies]
+dev = ["pytest>=7", "ruff>=0.4"]
+
+[dependency-groups]
 dev = ["pytest>=7", "ruff>=0.4"]
 
 [tool.hatch.version]

@@ -18,12 +18,12 @@ Not yet published to PyPI. Install from source:
 pip install git+https://github.com/derens99/vapix-python.git
 ```
 
-Or for local development:
+Or for local development (using [uv](https://docs.astral.sh/uv/)):
 
 ```bash
 git clone https://github.com/derens99/vapix-python.git
 cd vapix-python
-pip install -e ".[dev]"
+uv sync
 ```
 
 ## Quick start
@@ -77,11 +77,16 @@ except VapixRequestError as exc:
 
 ## Development
 
+The project uses [uv](https://docs.astral.sh/uv/) for dependency management:
+
 ```bash
-pip install -e ".[dev]"
-ruff check .   # lint
-pytest         # run the test suite (no camera required)
+uv sync               # create .venv and install the package + dev dependencies
+uv run ruff check .   # lint
+uv run pytest         # run the test suite (no camera required)
+uv build              # build sdist and wheel
 ```
+
+`pip install -e ".[dev]"` also works if you prefer plain pip.
 
 ## Migrating from 0.1.x
 
